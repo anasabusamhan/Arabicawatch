@@ -1,0 +1,41 @@
+name: Daily Arabica Check
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC daily — adjust as you like
+  workflow_dispatch: {}    # allows manual "Run workflow" button too
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Scrape for new entries
+        run: python scripts/scrape_entries.py
+
+      - name: Fact-check new entries
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/factcheck.py
+
+      - name: Build dashboard
+        run: python scripts/build_dashboard.py
+
+      - name: Commit updated data + dashboard
+        run: |
+          git config user.name "arabica-watch-bot"
+          git config user.email "actions@github.com"
+          git add data/seen_entries.json docs/
+          git diff --quiet --cached || git commit -m "Daily update: $(date -u +%Y-%m-%d)"
+          git push
